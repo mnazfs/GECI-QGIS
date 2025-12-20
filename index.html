@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Smart GECI Demo (WMS + GetFeatureInfo)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // Initialize map (adjust coords for your campus)
+    var map = L.map('map').setView([9.85, 76.97], 17);
+
+    // Add OpenStreetMap basemap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Add GeoServer WMS Layer
+    var wmsLayer = L.tileLayer.wms("http://localhost:8080/geoserver/smartgeci/wms", {
+      layers: 'smartgeci:facilities_demo',
+      format: 'image/png',
+      transparent: true,
+      version: '1.1.1',
+      attribution: "GeoServer"
+    }).addTo(map);
+
+    // Handle clicks → GetFeatureInfo request
+    map.on('click', function(e) {
+      var url = getFeatureInfoUrl(map, wmsLayer, e.latlng);
+
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          if (data.features && data.features.length > 0) {
+            var props = data.features[0].properties;
+            var content = "<b>" + props.name + "</b><br>" +
+                          "Type: " + props.type + "<br>" +
+                          "Dept: " + props.dept;
+            L.popup()
+              .setLatLng(e.latlng)
+              .setContent(content)
+              .openOn(map);
+          } else {
+            L.popup()
+              .setLatLng(e.latlng)
+              .setContent("No feature info here")
+              .openOn(map);
+          }
+        })
+        .catch(err => console.error(err));
+    });
+
+    // Function to build GetFeatureInfo URL
+    function getFeatureInfoUrl(map, layer, latlng) {
+      var point = map.latLngToContainerPoint(latlng, map.getZoom());
+      var size = map.getSize();
+
+      var params = {
+        request: 'GetFeatureInfo',
+        service: 'WMS',
+        srs: 'EPSG:4326',
+        styles: '',
+        transparent: true,
+        version: '1.1.1',
+        format: 'image/png',
+        bbox: map.getBounds().toBBoxString(),
+        height: size.y,
+        width: size.x,
+        layers: layer.options.layers,
+        query_layers: layer.options.layers,
+        info_format: 'application/json',
+        x: point.x,
+        y: point.y
+      };
+
+      return layer._url + L.Util.getParamString(params, layer._url, true);
+    }
+  </script>
+</body>
+</html>
